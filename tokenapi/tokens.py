@@ -28,7 +28,7 @@ class PasswordResetTokenGenerator(object):
         """
         # Parse the token
         try:
-            ts_b36, key_salt, hashval = token.split("-")
+            ts_b36, hashval = token.split("-")
         except ValueError:
             return False
 
@@ -38,7 +38,7 @@ class PasswordResetTokenGenerator(object):
             return False
 
         # Check that the timestamp/uid has not been tampered with
-        if not constant_time_compare(self._make_token_with_timestamp(user, ts, key_salt), token):
+        if not constant_time_compare(self._make_token_with_timestamp(user, ts), token):
             return False
 
         expiretime = getattr(settings, 'TOKEN_TIMEOUT_DAYS', 7)
@@ -50,24 +50,23 @@ class PasswordResetTokenGenerator(object):
                     return False
         return True
 
-    def _make_token_with_timestamp(self, user, timestamp, key_salt = None):
+
+    def _make_token_with_timestamp(self, user, timestamp):
         # timestamp is number of days since 2001-1-1.  Converted to
         # base 36, this gives us a 3 digit string until about 2121
         ts_b36 = int_to_base36(timestamp)
 
-        #key_salt =  getattr(settings, 'TOKEN_SALT', "tokenapi.tokens.PasswordResetTokenGenerator")
         if not user.password: 
-            user.password = make_password(None)
-            user.save()
-
-        if not key_salt:
+            password = make_password(None)
             key_salt = make_password(None)
-            key_salt = salted_hmac(six.text_type(user.pk), key_salt).hexdigest()
-
+            key_salt = base64.b64encode(salted_hmac(six.text_type(user.pk), key_salt).hexdigest())
+            user.password = "%s$%s"%(password, key_salt)
+            user.save()
+        else:
+            password, key_salt = user.password.split("$")
         value = (six.text_type(user.pk) + user.password + six.text_type(timestamp))
-        #hash = salted_hmac(key_salt, value).hexdigest()[::2]
         hashval = salted_hmac(key_salt, value).hexdigest()        
-        return base64.urlsafe_b64encode("%s-%s-%s" % (ts_b36, key_salt, hashval))
+        return base64.urlsafe_b64encode("%s-%s" % (ts_b36,hashval))
 
 
     def _num_days(self, dt):
