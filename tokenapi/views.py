@@ -19,6 +19,20 @@ from tokenapi.http import JsonResponse, JsonError, JsonResponseForbidden, JsonRe
 # Returns: success&token&user
 @csrf_exempt
 def token_new(request):
+    if request.user.is_authenticated():
+        user = request.user
+        if user:
+            TOKEN_CHECK_ACTIVE_USER = getattr(settings, "TOKEN_CHECK_ACTIVE_USER", False)
+            
+            if TOKEN_CHECK_ACTIVE_USER and not user.is_active:
+                return JsonResponseForbidden("User account is disabled.")
+
+            data = {
+                'token': token_generator.make_token(user),
+                'user': user.pk,
+            }
+            return JsonResponse(data)
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
@@ -42,7 +56,7 @@ def token_new(request):
         else:
             return JsonError("Must include 'username' and 'password' as POST parameters.")
     else:
-        return JsonError("Must access via a POST request.")
+        return JsonError("Must access via a POST request or be logged in.")
 
 # Checks if a given token and user pair is valid
 # token/:token/:user.json
